@@ -1,4 +1,4 @@
-name: Build DiPlay Changan UNI-T
+name: Build DiPlay Changan
 on:
   workflow_dispatch:
 jobs:
@@ -6,78 +6,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "temurin"
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Create patch script
+        run: python3 -c "
+import os,re;P='common/src/main/java/com/shilapi/xcertplay';exec(open(os.devnull,'w').write('') or True and None)
+" || true
       - name: Apply patches
         run: |
-          cat > common/src/main/java/com/shilapi/xcertplay/BrandDetector.kt << 'KEOF'
-          package com.shilapi.xcertplay
-          import android.os.Build
-          import android.util.Log
-          object BrandDetector {
-              private const val TAG = "BrandDetector"
-              private var cached: Boolean? = null
-              fun isBydHeadUnit(): Boolean {
-                  cached?.let { return it }
-                  val fp = Build.FINGERPRINT ?: ""
-                  val mfr = Build.MANUFACTURER ?: ""
-                  val r = fp.contains("BYD", true) || fp.contains("xdja", true) || fp.contains("containerservice", true) || mfr.contains("BYD", true)
-                  Log.i(TAG, "isBYD=$r fp=$fp mfr=$mfr")
-                  cached = r
-                  return r
-              }
-          }
-          KEOF
-          python3 -c "
-          import os, re
-          PKG = 'common/src/main/java/com/shilapi/xcertplay'
-          def ai(f):
-              if not os.path.isfile(f): return
-              with open(f) as fh: c = fh.read()
-              if 'BrandDetector' in c: return
-              with open(f, 'w') as fh: fh.write(c.replace('package com.shilapi.xcertplay', 'package com.shilapi.xcertplay\n\nimport com.shilapi.xcertplay.BrandDetector', 1))
-          def gs(f):
-              if not os.path.isfile(f): return
-              ai(f)
-              with open(f) as fh: c = fh.read()
-              if 'BrandDetector.isBydHeadUnit' in c: return
-              m = re.search(r'(fun supported\([^)]*\):\s*Boolean\s*=)', c)
-              if m: c = c[:m.start()] + 'fun supported(fingerprint: String=Build.FINGERPRINT): Boolean { if (!BrandDetector.isBydHeadUnit()) return false; return ' + c[m.end():] + ' }'
-              with open(f, 'w') as fh: fh.write(c)
-              print('  ' + os.path.basename(f) + ' OK')
-          f = PKG + '/ClusterMapPresentation.kt'
-          if os.path.isfile(f):
-              ai(f)
-              with open(f) as fh: c = fh.read()
-              t = 'override fun onCreate(savedInstanceState: Bundle?)'
-              if t in c and 'BrandDetector.isBydHeadUnit' not in c:
-                  i = c.index(t) + len(t)
-                  c = c[:i] + '\n        if (!BrandDetector.isBydHeadUnit()) { finish(); return }\n' + c[i:]
-                  with open(f, 'w') as fh: fh.write(c)
-                  print('  ClusterMapPresentation.kt OK')
-          for n in ['DiLink51ClusterLayout.kt', 'DiLink4ClusterDisplay.kt', 'BydVehicleSettingsBackend.kt']:
-              gs(PKG + '/' + n)
-          ai(PKG + '/DiLink51ClusterMonitor.kt')
-          print('  DiLink51ClusterMonitor.kt OK')
-          m = 'common/src/main/AndroidManifest.xml'
-          with open(m) as fh: c = fh.read()
-          c = re.sub(r'(<intent-filter>.*?USB_DEVICE_ATTACHED.*?</intent-filter>)', '<!-- \\\\1 -->', c, flags=re.DOTALL)
-          c = re.sub(r'(<meta-data.*?USB_DEVICE_ATTACHED.*/\\s*>)', '<!-- \\\\1 -->', c, flags=re.DOTALL)
-          with open(m, 'w') as fh: fh.write(c)
-          print('  AndroidManifest.xml OK')
-          print('All patches applied!')
-          "
-      - name: Build Debug APK
+          mkdir -p common/src/main/java/com/shilapi/xcertplay
+          printf 'package com.shilapi.xcertplay\nimport android.os.Build\nimport android.util.Log\nobject BrandDetector { private const val TAG = \"BrandDetector\"; private var cached: Boolean? = null\nfun isBydHeadUnit(): Boolean { cached?.let { return it }; val fp = Build.FINGERPRINT ?: \"\"; val mfr = Build.MANUFACTURER ?: \"\"\nval r = fp.contains(\"BYD\",true) || fp.contains(\"xdja\",true) || fp.contains(\"containerservice\",true) || mfr.contains(\"BYD\",true)\nLog.i(TAG,\"isBYD=$r fp=$fp mfr=$mfr\"); cached=r; return r } }\n' > common/src/main/java/com/shilapi/xcertplay/BrandDetector.kt
+          cd common/src/main/java/com/shilapi/xcertplay
+          for f in ClusterMapPresentation.kt DiLink51ClusterLayout.kt DiLink4ClusterDisplay.kt BydVehicleSettingsBackend.kt DiLink51ClusterMonitor.kt; do
+            [ -f "$f" ] && grep -q "BrandDetector" "$f" || sed -i 's/^package com.shilapi.xcertplay/package com.shilapi.xcertplay\n\nimport com.shilapi.xcertplay.BrandDetector/' "$f"
+            echo "Patched $f"
+          done
+          sed -i '/override fun onCreate(savedInstanceState: Bundle?)/a\        if (!BrandDetector.isBydHeadUnit()) { finish(); return }' ClusterMapPresentation.kt
+          echo "Patches done"
+      - name: Build
         run: ./gradlew assembleDebug --no-daemon
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: DiPlay-Changan-UNI-T
           path: app/build/outputs/apk/debug/*.apk
