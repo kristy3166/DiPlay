@@ -6,18 +6,17 @@ PKG = "common/src/main/java/com/shilapi/xcertplay"
 
 def add_import(f):
     if not os.path.isfile(f):
-        return False
+        return
     with open(f) as fh:
         c = fh.read()
     if "import com.shilapi.xcertplay.BrandDetector" in c:
-        return True
+        return
     with open(f, "w") as fh:
         fh.write(c.replace(
             "package com.shilapi.xcertplay",
             "package com.shilapi.xcertplay\n\nimport com.shilapi.xcertplay.BrandDetector",
             1
         ))
-    return True
 
 
 def guard_supported(f):
@@ -44,7 +43,7 @@ def guard_supported(f):
             fh.write(c)
         print("  Patched " + os.path.basename(f))
 
-# 1) BrandDetector.kt
+# BrandDetector.kt
 
 bi = PKG + "/BrandDetector.kt"
 with open(bi, "w") as fh:
@@ -71,32 +70,27 @@ object BrandDetector {
 """)
 print("  Created BrandDetector.kt")
 
-# 2) ClusterMapPresentation.kt
+# ClusterMapPresentation.kt
 
 f = PKG + "/ClusterMapPresentation.kt"
 if os.path.isfile(f):
     add_import(f)
     with open(f) as fh:
         c = fh.read()
-    t = "override fun onCreate(savedInstanceState: Bundle?)"
-    if t in c and "BrandDetector.isBydHeadUnit" not in c:
-        idx = c.index(t) + len(t)
-        c = c[:idx] + "\n        if (!BrandDetector.isBydHeadUnit()) { finish(); return }\n" + c[idx:]
+    target = "override fun onCreate(savedInstanceState: Bundle?)"
+    if target in c and "BrandDetector.isBydHeadUnit" not in c:
+        marker = "CLANGAN_GUARD_MARKER"
+        c = c.replace(target, target + " {" + marker)
+        c = c.replace(marker, "\n            if (!BrandDetector.isBydHeadUnit()) { finish(); return }\n", 1)
         with open(f, "w") as fh:
             fh.write(c)
         print("  Patched ClusterMapPresentation.kt")
 
-# 3) Guard supported()
-
 for n in ["DiLink51ClusterLayout.kt", "DiLink4ClusterDisplay.kt", "BydVehicleSettingsBackend.kt"]:
     guard_supported(PKG + "/" + n)
 
-# 4) DiLink51ClusterMonitor.kt
-
 add_import(PKG + "/DiLink51ClusterMonitor.kt")
 print("  Patched DiLink51ClusterMonitor.kt")
-
-# 5) AndroidManifest.xml
 
 m = "common/src/main/AndroidManifest.xml"
 if os.path.isfile(m):
