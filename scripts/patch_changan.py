@@ -6,13 +6,18 @@ PKG = "common/src/main/java/com/shilapi/xcertplay"
 
 def add_import(f):
     if not os.path.isfile(f):
-        return
+        return False
     with open(f) as fh:
         c = fh.read()
-    if "BrandDetector" in c:
-        return
+    if "import com.shilapi.xcertplay.BrandDetector" in c:
+        return True
     with open(f, "w") as fh:
-        fh.write(c.replace("package com.shilapi.xcertplay", "package com.shilapi.xcertplay\n\nimport com.shilapi.xcertplay.BrandDetector", 1))
+        fh.write(c.replace(
+            "package com.shilapi.xcertplay",
+            "package com.shilapi.xcertplay\n\nimport com.shilapi.xcertplay.BrandDetector",
+            1
+        ))
+    return True
 
 
 def guard_supported(f):
@@ -39,25 +44,7 @@ def guard_supported(f):
             fh.write(c)
         print("  Patched " + os.path.basename(f))
 
-
-f = PKG + "/ClusterMapPresentation.kt"
-if os.path.isfile(f):
-    add_import(f)
-    with open(f) as fh:
-        c = fh.read()
-    t = "override fun onCreate(savedInstanceState: Bundle?)"
-    if t in c and "BrandDetector.isBydHeadUnit" not in c:
-        i = c.index(t) + len(t)
-        c = c[:i] + "\n        if (!BrandDetector.isBydHeadUnit()) { finish(); return }\n" + c[i:]
-        with open(f, "w") as fh:
-            fh.write(c)
-        print("  Patched ClusterMapPresentation.kt")
-
-for n in ["DiLink51ClusterLayout.kt", "DiLink4ClusterDisplay.kt", "BydVehicleSettingsBackend.kt"]:
-    guard_supported(PKG + "/" + n)
-
-add_import(PKG + "/DiLink51ClusterMonitor.kt")
-print("  Patched DiLink51ClusterMonitor.kt")
+# 1) BrandDetector.kt
 
 bi = PKG + "/BrandDetector.kt"
 with open(bi, "w") as fh:
@@ -83,4 +70,46 @@ object BrandDetector {
 }
 """)
 print("  Created BrandDetector.kt")
+
+# 2) ClusterMapPresentation.kt
+
+f = PKG + "/ClusterMapPresentation.kt"
+if os.path.isfile(f):
+    add_import(f)
+    with open(f) as fh:
+        c = fh.read()
+    t = "override fun onCreate(savedInstanceState: Bundle?)"
+    if t in c and "BrandDetector.isBydHeadUnit" not in c:
+        idx = c.index(t) + len(t)
+        c = c[:idx] + "\n        if (!BrandDetector.isBydHeadUnit()) { finish(); return }\n" + c[idx:]
+        with open(f, "w") as fh:
+            fh.write(c)
+        print("  Patched ClusterMapPresentation.kt")
+
+# 3) Guard supported()
+
+for n in ["DiLink51ClusterLayout.kt", "DiLink4ClusterDisplay.kt", "BydVehicleSettingsBackend.kt"]:
+    guard_supported(PKG + "/" + n)
+
+# 4) DiLink51ClusterMonitor.kt
+
+add_import(PKG + "/DiLink51ClusterMonitor.kt")
+print("  Patched DiLink51ClusterMonitor.kt")
+
+# 5) AndroidManifest.xml
+
+m = "common/src/main/AndroidManifest.xml"
+if os.path.isfile(m):
+    with open(m) as fh:
+        c = fh.read()
+    c = re.sub(
+        r'(<intent-filter>\s*<action\s+android:name="android\.hardware\.usb\.action\.USB_DEVICE_ATTACHED"\s*/>\s*</intent-filter>)',
+        r"<!-- \1 -->", c, flags=re.DOTALL)
+    c = re.sub(
+        r'(<meta-data\s+android:name="android\.hardware\.usb\.action\.USB_DEVICE_ATTACHED"[^/]*/\s*>)',
+        r"<!-- \1 -->", c, flags=re.DOTALL)
+    with open(m, "w") as fh:
+        fh.write(c)
+    print("  Patched AndroidManifest.xml")
+
 print("\nAll Changan UNI-T patches applied!")
