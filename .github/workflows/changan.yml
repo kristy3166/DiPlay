@@ -1,130 +1,84 @@
-name: Build DiPlay (Changan UNI-T)
-
+name: Build DiPlay Changan UNI-T
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
-
+          java-version: "17"
+          distribution: "temurin"
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Apply Changan UNI-T patches
+      - name: Apply patches
         run: |
           cat > common/src/main/java/com/shilapi/xcertplay/BrandDetector.kt << 'KEOF'
           package com.shilapi.xcertplay
-
           import android.os.Build
           import android.util.Log
-
           object BrandDetector {
               private const val TAG = "BrandDetector"
               private var cached: Boolean? = null
-
               fun isBydHeadUnit(): Boolean {
                   cached?.let { return it }
                   val fp = Build.FINGERPRINT ?: ""
                   val mfr = Build.MANUFACTURER ?: ""
-                  val r = fp.contains("BYD", true) || fp.contains("xdja", true) ||
-                          fp.contains("containerservice", true) || mfr.contains("BYD", true)
+                  val r = fp.contains("BYD", true) || fp.contains("xdja", true) || fp.contains("containerservice", true) || mfr.contains("BYD", true)
                   Log.i(TAG, "isBYD=$r fp=$fp mfr=$mfr")
                   cached = r
                   return r
               }
           }
           KEOF
-
-python3 <<<
-python3 <<<'PYEOF'
-
-import os, re"common/src/main/java/com/shilapi/xcertplay"
-
-def add_import(f):
-if not os.path.isfile(f): return
-with open(f) as fh: c = fh.read()
-if "BrandDetector" in c: return
-c = c.replace("package com.shilapi.xcertplay", "
-"package com.shilapi.xcertplay\n\nimport com.shilapi.xcertplay.BrandDetector", 1)
-with open(f, "w") as fh: fh.write(c)
-
-def guard_supported(f):
-if not os.path.isfile(f): return
-              add_import(f)
-使用 open 打开文件 fh 并读取其内容 c = fh.read()
-如果 "BrandDetector.isBydHeadUnit" 在 c 中为真，则返回
-m = re.search(r'(fun supported\([^)]*\)\s*:\s*Boolean\s*=\s*\{)', c)
-如果 m 不为空
-c = c[:m.end()] + '\n        if (!BrandDetector.isBydHeadUnit()) return false\n' + c[m.end():]
-使用打开文件 (f, "w") 作为流对象，将字符串 c 写入文件
-打印文件路径.basename，显示当前文件名称
-返回
-使用正则表达式匹配函数支持字段为布尔值且包含特定模式的字符串
-如果匹配条件满足，则执行
-expr = c[m.start(2):].split("\n")[0].strip()
-new_func = f'fun supported(fingerprint: String = Build.FINGERPRINT): Boolean {{\n        if (!BrandDetector.isBydHeadUnit()) return false\n        return {expr}\n    }}'
-c = c[:m.start(1)] + new_func + c[m.end(2)+len(expr):]
-with open(f, "w") as fh: fh.write(c)
-print(f"  Patched {os.path.basename(f)}")
-
-f = f"{PKG}/ClusterMapPresentation.kt"
-if os.path.isfile(f):
-              add_import(f)
-with open(f) as fh: c = fh.read()
-if "BrandDetector.isBydHeadUnit" not in c:
-t = "override fun onCreate(savedInstanceState: Bundle?)"
-如果 t 在 c 中
-idx = c.index(t) + len(t)
-c = c[:idx] + '\n        if (!BrandDetector.isBydHeadUnit()) { finish(); return }\n' + c[idx:]
-with open(f, "w") as fh: fh.write(c)
-print("  Patched ClusterMapPresentation.kt")
-
-for 在 ["DiLink51ClusterLayout.kt", "DiLink4ClusterDisplay.kt", "BydVehicleSettingsBackend.kt"] 中：
-              guard_supported(f"{PKG}/{name}")
-
-          add_import(f"{PKG}/DiLink51ClusterMonitor.kt")
-print("  Patched DiLink51ClusterMonitor.kt")
-
-m = "common/src/main/AndroidManifest.xml"
-如果 m 是文件：
-使用 open(m) 打开文件并读取内容：
-c = re.sub(r'(<intent-filter>\s*<action\s+android:name="android\.hardware\.usb\.action\.USB_DEVICE_ATTACHED"\s*/>\s*</intent-filter>)',
-<!-- \\1 -->，c，flags=re.DOTALL)
-c = re.sub(r'(<meta-data\s+android:name="android\.hardware\.usb\.action\.USB_DEVICE_ATTACHED"[^/]*/\s*>)',
-<!-- \\1 -->，c，flags=re.DOTALL)
-with open(m, "w") as fh: fh.write(c)
-print("  Patched AndroidManifest.xml")
-
-print("\nAll Changan UNI-T patches applied!")
-PYEOF
-
-      - 名称: 构建调试 APK
-运行: /gradlew assembleDebug --no-daemon --stacktrace
-
-      - 名称: 查找并重命名 APK
-运行: |
-APK=$(find . -name "*.apk" -path "*/debug/*" -type f | head -1)
-如果 `$APK` 变量非空，则
-将 `$APK` 文件复制到 `DiPlay-Changan-debug.apk` 文件
-使用 `du -h` 命令计算 `DiPlay-Changan-debug.apk` 文件的大小，并将结果写入 `$GITHUB_ENV` 变量
-如果 `$APK` 变量为空，则
-
-      - 结束: 上传 APK
+          python3 -c "
+          import os, re
+          PKG = 'common/src/main/java/com/shilapi/xcertplay'
+          def ai(f):
+              if not os.path.isfile(f): return
+              with open(f) as fh: c = fh.read()
+              if 'BrandDetector' in c: return
+              with open(f, 'w') as fh: fh.write(c.replace('package com.shilapi.xcertplay', 'package com.shilapi.xcertplay\n\nimport com.shilapi.xcertplay.BrandDetector', 1))
+          def gs(f):
+              if not os.path.isfile(f): return
+              ai(f)
+              with open(f) as fh: c = fh.read()
+              if 'BrandDetector.isBydHeadUnit' in c: return
+              m = re.search(r'(fun supported\([^)]*\):\s*Boolean\s*=)', c)
+              if m: c = c[:m.start()] + 'fun supported(fingerprint: String=Build.FINGERPRINT): Boolean { if (!BrandDetector.isBydHeadUnit()) return false; return ' + c[m.end():] + ' }'
+              with open(f, 'w') as fh: fh.write(c)
+              print('  ' + os.path.basename(f) + ' OK')
+          f = PKG + '/ClusterMapPresentation.kt'
+          if os.path.isfile(f):
+              ai(f)
+              with open(f) as fh: c = fh.read()
+              t = 'override fun onCreate(savedInstanceState: Bundle?)'
+              if t in c and 'BrandDetector.isBydHeadUnit' not in c:
+                  i = c.index(t) + len(t)
+                  c = c[:i] + '\n        if (!BrandDetector.isBydHeadUnit()) { finish(); return }\n' + c[i:]
+                  with open(f, 'w') as fh: fh.write(c)
+                  print('  ClusterMapPresentation.kt OK')
+          for n in ['DiLink51ClusterLayout.kt', 'DiLink4ClusterDisplay.kt', 'BydVehicleSettingsBackend.kt']:
+              gs(PKG + '/' + n)
+          ai(PKG + '/DiLink51ClusterMonitor.kt')
+          print('  DiLink51ClusterMonitor.kt OK')
+          m = 'common/src/main/AndroidManifest.xml'
+          with open(m) as fh: c = fh.read()
+          c = re.sub(r'(<intent-filter>.*?USB_DEVICE_ATTACHED.*?</intent-filter>)', '<!-- \\\\1 -->', c, flags=re.DOTALL)
+          c = re.sub(r'(<meta-data.*?USB_DEVICE_ATTACHED.*/\\s*>)', '<!-- \\\\1 -->', c, flags=re.DOTALL)
+          with open(m, 'w') as fh: fh.write(c)
+          print('  AndroidManifest.xml OK')
+          print('All patches applied!')
+          "
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: DiPlay-Changan-UNI-T
-          path: DiPlay-Changan-debug.apk
-如果找不到文件：错误
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
