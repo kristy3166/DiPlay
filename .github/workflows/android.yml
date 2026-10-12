@@ -13,9 +13,9 @@ jobs:
     steps:
             - uses: actions/checkout@v4
 
-      # - name: Apply Changan UNI-T patches
+       - name: Apply Changan UNI-T patches
 
-      #   run: python3 scripts/patch_changan.py
+        run: python3 scripts/patch_changan.py
 
       - name: Reject credential files in public source
         run: python3 scripts/check_public_tree.py
